@@ -43,23 +43,30 @@ export default function WeekendWarrior() {
     }
   };
 
-  // Weekend gate: Friday 5 PM through Sunday 11:59 PM local
+  // Weekend gate: Friday 6 PM MST through Monday 6 AM MST (MST = UTC-7)
   // ?preview=true bypasses time gate for testing
   const isPreview = new URLSearchParams(window.location.search).get('preview') === 'true';
 
   useEffect(() => {
     const calcExpiry = () => {
       const now = new Date();
-      const day = now.getDay(); // 0=Sun, 5=Fri, 6=Sat
+      const mstOffset = -7;
+      const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
+      const mstMs = utcMs + mstOffset * 3600000;
+      const mstNow = new Date(mstMs);
+      const mstDay = mstNow.getDay(); // 0=Sun, 1=Mon, 5=Fri, 6=Sat
+      const mstHour = mstNow.getHours();
 
-      // Weekend window: Friday 5 PM (17:00) through Sunday 23:59:59
-      const isFridayEvening = day === 5 && now.getHours() >= 17;
-      const isSaturday = day === 6;
-      const isSunday = day === 0;
+      // Active: Friday 18:00 MST through Monday 05:59 MST
+      const isFridayEvening = mstDay === 5 && mstHour >= 18;
+      const isSaturday = mstDay === 6;
+      const isSunday = mstDay === 0;
+      const isMondayEarly = mstDay === 1 && mstHour < 6;
 
-      if (!isFridayEvening && !isSaturday && !isSunday) {
+      const isActive = isFridayEvening || isSaturday || isSunday || isMondayEarly;
+
+      if (!isActive) {
         if (!isPreview) { setOfferExpired(true); return; }
-        // Preview mode: fake 36 hours remaining
         setOfferExpired(false);
         setTimeToExpiry({ hours: 35, minutes: 59, seconds: 59 });
         return;
@@ -67,25 +74,33 @@ export default function WeekendWarrior() {
 
       setOfferExpired(false);
 
-      // Target: Sunday 23:59:59
-      let target = new Date(now);
-      if (day === 0) {
-        // Already Sunday — expires end of today
-        target.setHours(23, 59, 59, 0);
-      } else if (day === 6) {
-        // Saturday — expires end of tomorrow (Sunday)
-        target.setDate(target.getDate() + 1);
-        target.setHours(23, 59, 59, 0);
-      } else if (day === 5) {
-        // Friday evening — expires end of Sunday
-        target.setDate(target.getDate() + 2);
-        target.setHours(23, 59, 59, 0);
+      // Target: Monday 6 AM MST
+      let targetMst = new Date(mstNow);
+      if (mstDay === 5) {
+        // Friday evening: Monday = +3 days
+        targetMst.setDate(targetMst.getDate() + 3);
+      } else if (mstDay === 6) {
+        // Saturday: Monday = +2 days
+        targetMst.setDate(targetMst.getDate() + 2);
+      } else if (mstDay === 0) {
+        // Sunday: Monday = +1 day
+        targetMst.setDate(targetMst.getDate() + 1);
       }
+      // Monday early morning: already correct day
+      targetMst.setHours(6, 0, 0, 0);
 
-      const diff = target - now;
-      if (diff <= 0) {
-        setOfferExpired(true);
-        return;
+      const diff = targetMst - mstNow;
+      if (diff <= 0) { setOfferExpired(true); return; }
+      const h = Math.floor(diff / 3600000);
+      const m = Math.floor((diff % 3600000) / 60000);
+      const s = Math.floor((diff % 60000) / 1000);
+      setTimeToExpiry({ hours: h, minutes: m, seconds: s });
+    };
+
+    calcExpiry();
+    const interval = setInterval(calcExpiry, 1000);
+    return () => clearInterval(interval);
+  }, []);
       }
       const h = Math.floor(diff / 3600000);
       const m = Math.floor((diff % 3600000) / 60000);
@@ -449,7 +464,7 @@ export default function WeekendWarrior() {
           The Weekend Warrior Deal Has Ended
         </h1>
         <p style={{ fontFamily: "'Libre Baskerville', serif", fontSize: '16px', lineHeight: '1.7', color: '#666', maxWidth: '500px', marginBottom: '32px', fontStyle: 'italic' }}>
-          The free Temp Tag bundle is only available Friday evening through Sunday. Come back this weekend!
+          The free Temp Tag bundle is only available Friday 6 PM MST through Sunday. Come back this weekend!
         </p>
         <a href="https://legaltags.com/survey" style={{
           display: 'inline-block', background: '#d97706', color: '#fff', border: 'none',
