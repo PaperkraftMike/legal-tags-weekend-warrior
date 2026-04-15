@@ -44,6 +44,9 @@ export default function WeekendWarrior() {
   };
 
   // Weekend gate: Friday 5 PM through Sunday 11:59 PM local
+  // ?preview=true bypasses time gate for testing
+  const isPreview = new URLSearchParams(window.location.search).get('preview') === 'true';
+
   useEffect(() => {
     const calcExpiry = () => {
       const now = new Date();
@@ -55,7 +58,10 @@ export default function WeekendWarrior() {
       const isSunday = day === 0;
 
       if (!isFridayEvening && !isSaturday && !isSunday) {
-        setOfferExpired(true);
+        if (!isPreview) { setOfferExpired(true); return; }
+        // Preview mode: fake 36 hours remaining
+        setOfferExpired(false);
+        setTimeToExpiry({ hours: 35, minutes: 59, seconds: 59 });
         return;
       }
 
