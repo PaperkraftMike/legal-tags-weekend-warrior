@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { clarityEvent, fbqTrack } from '../utils/analytics';
 
 export default function WeekendWarrior() {
   const [step, setStep] = useState(0);
@@ -21,10 +22,7 @@ export default function WeekendWarrior() {
     termsAgreed: true
   });
   const [flashingOption, setFlashingOption] = useState(null);
-  const [visitorCount, setVisitorCount] = useState(18);
   const [stepHistory, setStepHistory] = useState([0]);
-  const [toastVisible, setToastVisible] = useState(false);
-  const [toastIndex, setToastIndex] = useState(0);
   const [validationErrors, setValidationErrors] = useState({});
   const [showAnalyzing, setShowAnalyzing] = useState(false);
   const [analyzingStep, setAnalyzingStep] = useState(0);
@@ -33,15 +31,6 @@ export default function WeekendWarrior() {
   const [timeToExpiry, setTimeToExpiry] = useState({ hours: 0, minutes: 0, seconds: 0 });
   const [offerExpired, setOfferExpired] = useState(false);
   const pendingRedirect = useRef(null);
-
-  const clarityEvent = (name, data) => {
-    if (window.clarity) {
-      if (data) {
-        window.clarity('set', name, typeof data === 'object' ? JSON.stringify(data) : String(data));
-      }
-      window.clarity('event', name);
-    }
-  };
 
   // Weekend gate: Friday 6 PM MST through Monday 6 AM MST (MST = UTC-7)
   // ?preview=true bypasses time gate for testing
@@ -101,17 +90,6 @@ export default function WeekendWarrior() {
     const interval = setInterval(calcExpiry, 1000);
     return () => clearInterval(interval);
   }, []);
-      }
-      const h = Math.floor(diff / 3600000);
-      const m = Math.floor((diff % 3600000) / 60000);
-      const s = Math.floor((diff % 60000) / 1000);
-      setTimeToExpiry({ hours: h, minutes: m, seconds: s });
-    };
-
-    calcExpiry();
-    const interval = setInterval(calcExpiry, 1000);
-    return () => clearInterval(interval);
-  }, []);
 
   const [utmParams] = useState(() => {
     const params = new URLSearchParams(window.location.search);
@@ -144,19 +122,8 @@ export default function WeekendWarrior() {
     return id;
   });
 
-  const socialProofItems = [
-    { name: 'James T.', state: 'CA', time: '2 min ago' },
-    { name: 'Lisa P.', state: 'FL', time: '5 min ago' },
-    { name: 'Robert K.', state: 'TX', time: '8 min ago' },
-    { name: 'Amanda L.', state: 'NY', time: '10 min ago' },
-    { name: 'Steve H.', state: 'AZ', time: '13 min ago' },
-    { name: 'Karen W.', state: 'NJ', time: '16 min ago' },
-    { name: 'Tom B.', state: 'WA', time: '20 min ago' },
-    { name: 'Michelle G.', state: 'CT', time: '24 min ago' },
-  ];
-
   // ============================================================
-  // STEP DEFINITIONS — identical to main funnel
+  // STEP DEFINITIONS, identical to main funnel
   // ============================================================
   const getNextStep = (currentStep, data) => {
     const d = data || formData;
@@ -194,7 +161,7 @@ export default function WeekendWarrior() {
   };
 
   // ============================================================
-  // REDIRECT URL LOGIC — identical to main funnel
+  // REDIRECT URL LOGIC, identical to main funnel
   // ============================================================
   const getRedirectUrl = () => {
     const d = formData;
@@ -349,13 +316,11 @@ export default function WeekendWarrior() {
       vehicle_age: formData.vehicleAge, checkout_destination: redirectUrl
     });
 
-    if (typeof window.fbq === 'function') {
-      window.fbq('track', 'AddToCart', {
-        content_name: formData.vehicleType,
-        content_category: formData.hasTitle === 'yes' ? 'Registration' : 'Retitle',
-        content_ids: [redirectUrl], content_type: 'product', currency: 'USD',
-      }, { eventID: eventId + '_atc' });
-    }
+    fbqTrack('AddToCart', {
+      content_name: formData.vehicleType,
+      content_category: formData.hasTitle === 'yes' ? 'Registration' : 'Retitle',
+      content_ids: [redirectUrl], content_type: 'product', currency: 'USD',
+    }, { eventID: eventId + '_atc' });
 
     pendingRedirect.current = redirectUrl;
     setShowAnalyzing(true);
@@ -400,18 +365,6 @@ export default function WeekendWarrior() {
 
   useEffect(() => {
     clarityEvent('weekend_warrior_page_view');
-    const interval = setInterval(() => {
-      setVisitorCount(prev => Math.max(10, Math.min(32, prev + Math.floor(Math.random() * 7) - 3)));
-    }, 3000 + Math.random() * 2000);
-    let toastTimeout;
-    const showNextToast = () => {
-      setToastVisible(true);
-      setTimeout(() => setToastVisible(false), 4500);
-      setToastIndex(prev => (prev + 1) % 8);
-      toastTimeout = setTimeout(showNextToast, 18000 + Math.random() * 12000);
-    };
-    toastTimeout = setTimeout(showNextToast, 10000);
-    return () => { clearInterval(interval); clearTimeout(toastTimeout); };
   }, []);
 
   const RadioOption = ({ field, value, selected, onChange, children }) => {
@@ -441,9 +394,15 @@ export default function WeekendWarrior() {
   };
 
   const testimonials = [
-    { name: 'Mike R.', location: 'California', text: 'Saved over $8,000 in sales tax on my RV. Legal Tags handled everything including the LLC setup. Plates arrived in 3 days!' },
-    { name: 'Sarah T.', location: 'Texas', text: 'Had a car with no title that Texas said was impossible to register. Legal Tags got it done in 2 weeks. Amazing service.' },
-    { name: 'James K.', location: 'Florida', text: 'The process was so simple. They set up my LLC, registered my boat, and I never had to leave my house. Highly recommend.' }
+    { name: 'Bobbie Jo Vann', location: 'California', date: '3 weeks ago', text: "I have three vehicles registered in Montana through Legal Tags. I've been stopped by the police a couple times asking why I have Montana plates and I told them I have a holding company in Montana. I show them the registration. I have insurance here in California and they send me on my way." },
+    { name: 'Nick Serrapica', location: 'Google Review', date: '1 week ago', text: 'I was skeptical. Isabelle was my agent and did great. I got my plates and registration about three weeks later and my title three weeks after that. Saved my butt big time. Very satisfied.' },
+    { name: 'Jacob Henry', location: 'New York', date: '1 week ago', text: 'This is legit as it gets. My Mustang wont pass NY inspection due to mods, not an issue with Legal Tags. 2 week turn around and I am rolling again.' },
+    { name: 'Steven GM', location: 'New Jersey', date: '2 weeks ago', text: 'Legitimate. They received the title on Thursday 03/05, and by the Friday of the following week, I had my registration and license plates. The whole process was easy and straightforward. My side-by-side is no longer just an ornament, thanks Legal Tags.' },
+    { name: 'Jennifer Rushin', location: 'Google Review', date: '5 days ago', text: 'Very friendly and helpful. They answered any questions we had. The process was straight forward and easy. They saved us a bunch of money and we received the tags in 2 weeks. Will definitely be using again.' },
+    { name: 'Ryan Taylor', location: 'Google Review', date: '1 week ago', text: 'Would give 10 stars if I could. Amazing customer service. Porter was a pleasure to deal with on the phone when inquiring about my shipping status. Highly recommend them.' },
+    { name: 'Luis Hoyos', location: 'Google Review', date: '2 weeks ago', text: 'A professional and efficient team. What stands out most is their attention to detail and the speed at which they process requests. They simplify a complex process with clear communication and make sure every document is accurate and compliant.' },
+    { name: 'Jason Palmasano', location: 'Google Review', date: '4 days ago', text: 'The folks at Legal Tags were very helpful in helping me get plates and a title for my pickup. Will definitely do business again.' },
+    { name: 'Tim Hagaman', location: 'Local Guide, 32 reviews', date: '3 weeks ago', text: 'Excellent service with friendly and knowledgeable people. If you are looking for an alternative, this is a great one. I especially appreciate the custom tags and the assortment of groups they support.' }
   ];
 
   const pad = (n) => String(n).padStart(2, '0');
@@ -548,21 +507,6 @@ export default function WeekendWarrior() {
           .process-grid { grid-template-columns: repeat(4, 1fr) !important; }
           .testimonials-grid { grid-template-columns: repeat(3, 1fr) !important; }
           .vehicle-grid { grid-template-columns: repeat(4, 1fr); }
-          .social-proof-toast { bottom: 20px; left: 20px; }
-        }
-        .social-proof-toast {
-          position: fixed; bottom: 12px; left: 12px; right: 12px; z-index: 90;
-          background: #fff; border: 2px solid #d97706; border-radius: 10px;
-          padding: 12px 16px; box-shadow: 0 8px 30px rgba(0,0,0,0.12);
-          transform: translateX(-120%); transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-          display: flex; align-items: center; gap: 10px;
-        }
-        @media (min-width: 768px) { .social-proof-toast { max-width: 360px; right: auto; } }
-        .social-proof-toast.visible { transform: translateX(0); }
-        .toast-avatar {
-          width: 36px; height: 36px; background: #d97706; border-radius: 50%;
-          display: flex; align-items: center; justify-content: center;
-          color: #fff; font-family: 'Oswald', sans-serif; font-size: 14px; font-weight: 700; flex-shrink: 0;
         }
         .bonus-badge {
           display: inline-flex; align-items: center; gap: 6px;
@@ -842,9 +786,9 @@ export default function WeekendWarrior() {
                     <span className="mono" style={{ fontSize: '11px', color: '#666', lineHeight: '1.5' }}>I agree to receive calls, texts & emails from Legal Tags. Msg & data rates may apply. Reply STOP to opt out.</span>
                   </label>
                   <div style={{ textAlign: 'center', marginTop: '8px' }}>
-                    <a href="#" className="mono" style={{ fontSize: '12px', color: '#d97706' }}>Privacy Policy</a>
+                    <a href="https://legaltags.com/privacy-policy" target="_blank" rel="noopener noreferrer" className="mono" style={{ fontSize: '12px', color: '#d97706' }}>Privacy Policy</a>
                     <span className="mono" style={{ fontSize: '12px', color: '#999', margin: '0 8px' }}>|</span>
-                    <a href="#" className="mono" style={{ fontSize: '12px', color: '#d97706' }}>Terms of Service</a>
+                    <a href="https://legaltags.com/terms-and-conditions" target="_blank" rel="noopener noreferrer" className="mono" style={{ fontSize: '12px', color: '#d97706' }}>Terms of Service</a>
                   </div>
                 </div>
               </div>
@@ -859,8 +803,7 @@ export default function WeekendWarrior() {
             <button type="button" onClick={handlePrev} disabled={stepHistory.length <= 1}
               style={{ background: 'transparent', border: 'none', color: stepHistory.length <= 1 ? 'rgba(255,255,255,0.3)' : '#fff', fontFamily: "'Oswald', sans-serif", fontSize: '14px', fontWeight: '500', letterSpacing: '1px', cursor: stepHistory.length <= 1 ? 'not-allowed' : 'pointer' }}>← PREV</button>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <div className="pulse-dot" />
-              <span className="mono" style={{ fontSize: '11px', color: 'rgba(255,255,255,0.7)' }}><strong style={{ color: '#fff' }}>{visitorCount}</strong> viewing</span>
+              <span className="mono" style={{ fontSize: '11px', color: 'rgba(255,255,255,0.7)' }}>🔒 Secure</span>
             </div>
             {step !== 11 ? (
               <button type="button" onClick={handleNext} disabled={!canProceed()}
@@ -871,6 +814,23 @@ export default function WeekendWarrior() {
             )}
           </div>
         </div>
+      </section>
+
+      {/* Google Reviews Trust Strip */}
+      <section style={{ padding: '0 20px 16px' }}>
+        <a href="https://www.google.com/search?q=Legal+Tags+Philipsburg+MT" target="_blank" rel="noopener noreferrer"
+          onClick={() => clarityEvent('weekend_warrior_google_reviews_click')}
+          style={{ display: 'block', maxWidth: '500px', margin: '0 auto', textDecoration: 'none' }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', flexWrap: 'wrap',
+            background: '#fffbeb', border: '2px solid #d97706', borderRadius: '8px', padding: '12px 16px'
+          }}>
+            <span style={{ color: '#d97706', fontSize: '16px', letterSpacing: '1px' }}>★★★★★</span>
+            <span className="condensed" style={{ fontSize: '14px', fontWeight: '700', color: '#92400e', letterSpacing: '0.5px' }}>4.8 from 273 reviews</span>
+            <span className="mono" style={{ fontSize: '11px', color: '#888' }}>Verified MT business, Philipsburg, MT</span>
+            <span className="condensed" style={{ fontSize: '13px', fontWeight: '700', color: '#d97706', letterSpacing: '0.5px' }}>Verify →</span>
+          </div>
+        </a>
       </section>
 
       {/* Weekend Bonus Callout */}
@@ -897,9 +857,16 @@ export default function WeekendWarrior() {
               <div key={i} className="testimonial-card">
                 <div style={{ color: '#d97706', marginBottom: '8px' }}>★★★★★</div>
                 <p className="serif" style={{ fontSize: '14px', lineHeight: '1.6', color: '#333', marginBottom: '12px', fontStyle: 'italic' }}>"{t.text}"</p>
-                <div className="mono" style={{ fontSize: '12px', color: '#888' }}><strong>{t.name}</strong> · {t.location}</div>
+                <div className="mono" style={{ fontSize: '12px', color: '#888' }}><strong>{t.name}</strong> · {t.location} · {t.date}</div>
               </div>
             ))}
+          </div>
+          <div style={{ textAlign: 'center', marginTop: '24px' }}>
+            <a href="https://www.google.com/search?q=Legal+Tags+Philipsburg+MT" target="_blank" rel="noopener noreferrer"
+              onClick={() => clarityEvent('weekend_warrior_google_reviews_click')}
+              className="condensed" style={{ fontSize: '14px', fontWeight: '700', color: '#d97706', letterSpacing: '0.5px', textDecoration: 'none' }}>
+              Read all 273 reviews on Google →
+            </a>
           </div>
         </div>
       </section>
@@ -918,8 +885,8 @@ export default function WeekendWarrior() {
           {[
             { title: 'Save Thousands in Sales Tax', desc: 'A $60,000 vehicle in California costs $5,400 in sales tax alone. Montana charges $0.' },
             { title: 'No Annual State Inspections, Ever', desc: 'No annual safety, emissions, or SMOG tests. No failed inspections holding up your registration.' },
-            { title: 'Permanent Registration Available', desc: 'Vehicles 11+ years old can qualify for permanent registration — one payment, no renewals (qualifying vehicles).' },
-            { title: 'Lost Title Recovery', desc: "Can't find your title? We retitle vehicles other states say are impossible — 99.5% success rate." }
+            { title: 'Permanent Registration Available', desc: 'Vehicles 11+ years old can qualify for permanent registration (qualifying vehicles): one payment, no renewals.' },
+            { title: 'Lost Title Recovery', desc: "Can't find your title? We retitle vehicles other states say are impossible, with a 99.5% success rate." }
           ].map((item, i) => (
             <div key={i} className="check-item">
               <div className="checkmark">✓</div>
@@ -940,9 +907,9 @@ export default function WeekendWarrior() {
           <div className="process-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '24px' }}>
             {[
               { num: '1', title: 'Complete Survey', desc: 'Answer a few quick questions about your vehicle' },
-              { num: '2', title: 'We Create Your LLC', desc: 'Montana LLC same-day (free — $300 value) + free Temp Tag ships immediately' },
+              { num: '2', title: 'We Create Your LLC', desc: 'Montana LLC same-day (free, $300 value) + free Temp Tag ships immediately' },
               { num: '3', title: 'Vehicle Registered', desc: 'We register your vehicle under the LLC with Montana DMV' },
-              { num: '4', title: 'Plates Delivered', desc: 'Permanent Montana plates ship to you in ~3 days' }
+              { num: '4', title: 'Plates Delivered', desc: 'Permanent Montana plates (qualifying vehicles) ship to you in ~3 days' }
             ].map((s, i) => (
               <div key={i} style={{ textAlign: 'center' }}>
                 <div style={{ width: '48px', height: '48px', border: '3px solid #fff', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', fontFamily: "'Oswald', sans-serif", fontSize: '20px', fontWeight: '700' }}>{s.num}</div>
@@ -975,28 +942,21 @@ export default function WeekendWarrior() {
           <div className="condensed" style={{ fontSize: '18px', fontWeight: '700', letterSpacing: '2px', marginBottom: '8px' }}>LEGAL TAGS</div>
           <div className="mono" style={{ fontSize: '12px', opacity: 0.7 }}>Montana Vehicle Registration & Titling</div>
         </div>
-        <div className="mono" style={{ fontSize: '13px', marginBottom: '24px' }}>
+        <div className="mono" style={{ fontSize: '13px', marginBottom: '12px' }}>
           <a href="tel:406-510-0599" onClick={() => clarityEvent('weekend_warrior_phone_footer')} style={{ color: '#d97706', textDecoration: 'none', fontWeight: '500' }}>📞 406-510-0599</a>
           <span style={{ opacity: 0.5, margin: '0 12px' }}>|</span><span style={{ opacity: 0.7 }}>M-F 8am-8pm MT</span>
         </div>
-        <div className="mono" style={{ fontSize: '11px', opacity: 0.5, marginBottom: '16px' }}>126 W Broadway #107, Philipsburg, MT 59858</div>
+        <div className="mono" style={{ fontSize: '13px', marginBottom: '24px' }}>
+          <a href="mailto:support@legaltags.com" style={{ color: '#d97706', textDecoration: 'none', fontWeight: '500' }}>✉ support@legaltags.com</a>
+        </div>
+        <div className="mono" style={{ fontSize: '11px', opacity: 0.5, marginBottom: '8px' }}>126 W Broadway #107, Philipsburg, MT 59858</div>
+        <div className="mono" style={{ fontSize: '11px', marginBottom: '16px' }}>
+          <a href="https://biz.sosmt.gov/api/report/FromActiveReport/0/Agents/0" target="_blank" rel="noopener noreferrer" style={{ color: '#fdf6e3', opacity: 0.5, textDecoration: 'underline' }}>Verified MT Registered Agent (SOS)</a>
+        </div>
         <div style={{ borderTop: '1px solid rgba(255,255,255,0.15)', paddingTop: '20px', marginTop: '20px' }}>
           <span className="mono" style={{ fontSize: '10px', opacity: 0.4 }}>© 2026 Legal Tags · All Rights Reserved</span>
         </div>
       </footer>
-
-      {/* Social Proof Toast */}
-      <div className={`social-proof-toast ${toastVisible ? 'visible' : ''}`}>
-        <div className="toast-avatar">{socialProofItems[toastIndex].name.charAt(0)}</div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div className="mono" style={{ fontSize: '12px', color: '#1a1a1a', lineHeight: '1.4' }}>
-            <strong>{socialProofItems[toastIndex].name}</strong><span style={{ color: '#888' }}> from {socialProofItems[toastIndex].state}</span>
-          </div>
-          <div className="mono" style={{ fontSize: '11px', color: '#d97706', fontWeight: '500', marginTop: '2px' }}>just claimed free Temp Tag + $300 credit</div>
-          <div className="mono" style={{ fontSize: '10px', color: '#aaa', marginTop: '2px' }}>{socialProofItems[toastIndex].time}</div>
-        </div>
-        <button onClick={() => setToastVisible(false)} style={{ position: 'absolute', top: '6px', right: '8px', background: 'none', border: 'none', fontSize: '14px', color: '#ccc', cursor: 'pointer', padding: '2px 4px', lineHeight: 1 }}>×</button>
-      </div>
 
       {/* Analyzing Overlay */}
       {showAnalyzing && (
