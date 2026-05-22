@@ -28,6 +28,9 @@ export default function WeekendWarrior() {
   const [analyzingStep, setAnalyzingStep] = useState(0);
   const [analyzingProgress, setAnalyzingProgress] = useState(0);
   const [hasInteracted, setHasInteracted] = useState(false);
+  // Fires once on the first character typed in any contact field (fullName /
+  // email / phone), mirroring the main funnel's contact-engagement tracking.
+  const [hasEngagedContact, setHasEngagedContact] = useState(false);
   const [timeToExpiry, setTimeToExpiry] = useState({ hours: 0, minutes: 0, seconds: 0 });
   const [offerExpired, setOfferExpired] = useState(false);
   const pendingRedirect = useRef(null);
@@ -156,6 +159,8 @@ export default function WeekendWarrior() {
         return 9;
       case 9: return 11;
       case 10: return 11;
+      case 11: return 12; // Contact Name, Contact Email
+      case 12: return 13; // Contact Email, Contact Phone
       default: return 11;
     }
   };
@@ -234,7 +239,10 @@ export default function WeekendWarrior() {
   const stepNames = {
     0: 'customer_type', 1: 'coupon_type', 2: 'vehicle_type', 3: 'truck_size',
     4: 'vehicle_age', 5: 'financing', 6: 'title_status', 7: 'salvage_status',
-    8: 'salvage_classification', 9: 'salvage_temp_tag', 10: 'physical_inspection', 11: 'contact_info'
+    8: 'salvage_classification', 9: 'salvage_temp_tag', 10: 'physical_inspection',
+    11: 'contact_info_name',  // CRO v4: name (first + last)
+    12: 'contact_info_email', // CRO v4: email
+    13: 'contact_info_phone'  // CRO v4: phone + TCPA + submit
   };
 
   const navigateToStep = (targetStep) => {
@@ -283,7 +291,13 @@ export default function WeekendWarrior() {
     setValidationErrors({});
 
     localStorage.setItem('legalTagsContact', JSON.stringify({ ...formData }));
-    const redirectUrl = getRedirectUrl();
+    const baseRedirectUrl = getRedirectUrl();
+    // WEEKENDTAG is 100% off the standalone temp-tag product only, so it can
+    // only ride along when the destination IS the temp-tag checkout, and only
+    // while the weekend offer window is live (SamCart has no time schedule).
+    const redirectUrl = (!offerExpired && baseRedirectUrl === '/temp-tag')
+      ? `${baseRedirectUrl}?coupon=WEEKENDTAG`
+      : baseRedirectUrl;
     const firstName = nameParts[0] || '';
     const lastName = nameParts.slice(1).join(' ') || '';
 
@@ -356,7 +370,14 @@ export default function WeekendWarrior() {
       case 8: return formData.salvageClassification !== '';
       case 9: return formData.salvageTempTag !== '';
       case 10: return formData.physicalInspection !== '';
-      case 11: return formData.fullName.trim() !== '' && formData.email.trim() !== '' && formData.phone.trim() !== '' && formData.termsAgreed;
+      // CRO v4: contact step split into three single-field micro-steps.
+      // Step 11 = first + last name. Step 12 = email. Step 13 = phone + TCPA.
+      case 11: {
+        const nameParts = formData.fullName.trim().split(/\s+/);
+        return nameParts.length >= 2 && nameParts[1].length > 0;
+      }
+      case 12: return formData.email.trim() !== '' && isValidEmail(formData.email);
+      case 13: return formData.phone.trim() !== '' && isValidPhone(formData.phone) && formData.termsAgreed;
       default: return false;
     }
   };
@@ -374,8 +395,8 @@ export default function WeekendWarrior() {
         style={{
           display: 'flex', alignItems: 'center', gap: '12px', width: '100%',
           padding: '16px 20px',
-          background: isFlashing ? '#d97706' : selected ? '#fef3c7' : '#fffbeb',
-          border: selected ? '2px solid #d97706' : '2px solid #e5d5a0',
+          background: isFlashing ? '#1e3a5f' : selected ? '#f0f7ff' : '#fff',
+          border: selected ? '2px solid #1e3a5f' : '2px solid #d4cfc4',
           borderRadius: '8px', cursor: 'pointer',
           fontFamily: "'DM Mono', monospace", fontSize: '15px',
           color: isFlashing ? '#fff' : '#1a1a1a',
@@ -384,8 +405,8 @@ export default function WeekendWarrior() {
         }}>
         <div style={{
           width: '20px', height: '20px', borderRadius: '50%',
-          border: isFlashing ? '6px solid #fff' : selected ? '6px solid #d97706' : '2px solid #999',
-          background: isFlashing ? '#d97706' : '#fff',
+          border: isFlashing ? '6px solid #fff' : selected ? '6px solid #1e3a5f' : '2px solid #999',
+          background: isFlashing ? '#1e3a5f' : '#fff',
           flexShrink: 0, transition: 'all 0.15s ease'
         }} />
         {children}
@@ -463,6 +484,19 @@ export default function WeekendWarrior() {
           display: flex; align-items: center; justify-content: center; position: relative; flex-shrink: 0;
         }
         .official-seal::before { content: ''; position: absolute; width: 58px; height: 58px; border: 1px dashed #92400e; border-radius: 50%; opacity: 0.5; }
+        /* Survey-card form inputs use the main funnel's navy/cream palette. */
+        .survey-input {
+          background: #fff; border: 2px solid #d4cfc4; padding: 16px 18px;
+          font-size: 18px; font-family: 'DM Mono', monospace; width: 100%;
+          color: #1a1a1a; transition: all 0.2s ease; border-radius: 8px; -webkit-appearance: none;
+        }
+        .survey-input:focus { outline: none; border-color: #1e3a5f; }
+        .survey-input::placeholder { color: #999; }
+        select.survey-input {
+          cursor: pointer;
+          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23666' stroke-width='2' fill='none'/%3E%3C/svg%3E");
+          background-repeat: no-repeat; background-position: right 16px center; padding-right: 40px;
+        }
         .form-input {
           background: #fffbeb; border: 2px solid #e5d5a0; padding: 16px 18px;
           font-size: 18px; font-family: 'DM Mono', monospace; width: 100%;
@@ -494,12 +528,12 @@ export default function WeekendWarrior() {
         .vehicle-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
         .vehicle-card {
           display: flex; flex-direction: column; align-items: center; padding: 12px 8px;
-          background: #fffbeb; border: 2px solid #e5d5a0; border-radius: 8px; cursor: pointer;
+          background: #fff; border: 2px solid #d4cfc4; border-radius: 8px; cursor: pointer;
           transition: all 0.15s ease; text-align: center; font-family: 'DM Mono', monospace;
         }
-        .vehicle-card:hover { border-color: #d97706; }
-        .vehicle-card.selected { border-color: #d97706; background: #fef3c7; }
-        .vehicle-card.flashing { border-color: #d97706; background: #d97706; color: #fff; transform: scale(1.02); }
+        .vehicle-card:hover { border-color: #1e3a5f; }
+        .vehicle-card.selected { border-color: #1e3a5f; background: #f0f7ff; }
+        .vehicle-card.flashing { border-color: #1e3a5f; background: #1e3a5f; color: #fff; transform: scale(1.02); }
         .vehicle-card-label { font-family: 'Oswald', sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; margin-top: 8px; line-height: 1.2; }
         .vehicle-card-emoji { font-size: 32px; }
         @media (min-width: 768px) {
@@ -525,11 +559,7 @@ export default function WeekendWarrior() {
         letterSpacing: '1px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
         flexWrap: 'wrap'
       }}>
-        <span>🏁 WEEKEND WARRIOR DEAL ENDS IN</span>
-        <span style={{
-          background: '#fff', color: '#92400e', padding: '3px 8px', borderRadius: '3px',
-          fontWeight: '700', fontFamily: "'DM Mono', monospace", fontSize: '13px'
-        }}>{pad(timeToExpiry.hours)}:{pad(timeToExpiry.minutes)}:{pad(timeToExpiry.seconds)}</span>
+        <span>🏁 WEEKEND WARRIOR DEAL ENDS MONDAY AT 6 AM MST</span>
       </div>
 
       {/* Header */}
@@ -551,7 +581,6 @@ export default function WeekendWarrior() {
       {/* Hero */}
       <section style={{ padding: '32px 20px 0', textAlign: 'center' }}>
         <div style={{ maxWidth: '500px', margin: '0 auto' }}>
-          <div style={{ fontSize: '48px', marginBottom: '12px' }}>🏁</div>
           <div className="stamp" style={{ marginBottom: '16px' }}>This Weekend Only</div>
           <h1 className="condensed" style={{
             fontSize: 'clamp(30px, 8vw, 48px)', fontWeight: '700', lineHeight: '0.95',
@@ -587,21 +616,22 @@ export default function WeekendWarrior() {
       <section style={{ padding: '0 20px 16px' }} data-survey-form>
         <div style={{
           maxWidth: '500px', margin: '0 auto', background: '#fff',
-          border: '3px solid #92400e', boxShadow: '6px 6px 0 #92400e', overflow: 'hidden'
+          border: '3px solid #1a1a1a', boxShadow: '4px 4px 0 #1a1a1a', overflow: 'hidden'
         }}>
-          <div style={{ padding: '16px 20px', background: '#fffbeb', borderBottom: '1px solid #e5d5a0' }}>
-            <div style={{ background: '#e5d5a0', borderRadius: '2px', height: '4px', overflow: 'hidden' }}>
-              <div style={{ width: `${getProgressPercent()}%`, height: '100%', background: '#d97706', borderRadius: '2px', transition: 'width 0.3s ease' }} />
+          {/* Progress Bar */}
+          <div style={{ padding: '16px 20px', background: '#faf8f4', borderBottom: '1px solid #e5e0d5' }}>
+            <div style={{ background: '#e5e0d5', borderRadius: '2px', height: '4px', overflow: 'hidden' }}>
+              <div style={{ width: `${getProgressPercent()}%`, height: '100%', background: '#1e3a5f', borderRadius: '2px', transition: 'width 0.3s ease' }} />
             </div>
           </div>
 
           <div style={{ padding: '24px 20px', minHeight: '280px' }}>
             {step === 0 && (
               <div>
-                <h2 className="condensed" style={{ fontSize: '20px', fontWeight: '700', textAlign: 'center', marginBottom: '16px' }}>
-                  Complete the survey to claim your <span style={{ color: '#d97706' }}>free Temp Tag + $300 LLC credit</span>.
+                <h2 className="condensed" style={{ fontSize: '20px', fontWeight: '700', textAlign: 'center', marginBottom: '16px', color: '#1a1a1a' }}>
+                  Complete the survey to claim your <span style={{ color: '#8b1a1a' }}>free Temp Tag + $300 LLC credit</span>.
                 </h2>
-                <p style={{ marginBottom: '20px', fontSize: '14px', color: '#555' }}>Are you a Car Dealer, Collector or an Individual?</p>
+                <p style={{ marginBottom: '20px', fontSize: '14px', color: '#444' }}>Are you a Car Dealer, Collector or an Individual?</p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   <RadioOption field="customerType" value="dealer" selected={formData.customerType === 'dealer'} onChange={handleRadioSelect}>Car Dealer</RadioOption>
                   <RadioOption field="customerType" value="collector" selected={formData.customerType === 'collector'} onChange={handleRadioSelect}>Car Collector or Car Flipper</RadioOption>
@@ -612,7 +642,7 @@ export default function WeekendWarrior() {
 
             {step === 1 && (
               <div>
-                <p style={{ marginBottom: '20px', fontSize: '14px', color: '#555' }}>Do you want a volume discount for multiple vehicles, or do you only need help with one vehicle?</p>
+                <p style={{ marginBottom: '20px', fontSize: '14px', color: '#444' }}>Do you want a volume discount for multiple vehicles, or do you only need help with one vehicle?</p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   <RadioOption field="coupon" value="volume" selected={formData.coupon === 'volume'} onChange={handleRadioSelect}>Volume Discount</RadioOption>
                   <RadioOption field="coupon" value="one" selected={formData.coupon === 'one'} onChange={handleRadioSelect}>One Vehicle</RadioOption>
@@ -623,8 +653,8 @@ export default function WeekendWarrior() {
 
             {step === 2 && (
               <div>
-                <h2 className="condensed" style={{ fontSize: '22px', fontWeight: '700', textAlign: 'center', marginBottom: '8px', color: '#92400e' }}>Type of Vehicle</h2>
-                <p style={{ marginBottom: '16px', fontSize: '14px', color: '#555' }}>What type of vehicle are you looking to Register or Retitle?</p>
+                <h2 className="condensed" style={{ fontSize: '22px', fontWeight: '700', textAlign: 'center', marginBottom: '8px', color: '#1e3a5f' }}>Type of Vehicle</h2>
+                <p style={{ marginBottom: '16px', fontSize: '14px', color: '#444' }}>What type of vehicle are you looking to Register or Retitle?</p>
                 <div className="vehicle-grid">
                   {[
                     { id: 'car', label: 'Car / Van / SUV', emoji: '🚗' }, { id: 'truck', label: 'Truck', emoji: '🛻' },
@@ -647,9 +677,9 @@ export default function WeekendWarrior() {
 
             {step === 3 && (
               <div>
-                <h2 className="condensed" style={{ fontSize: '22px', fontWeight: '700', textAlign: 'center', marginBottom: '8px', color: '#92400e' }}>Truck Size</h2>
-                <p style={{ marginBottom: '20px', fontSize: '14px', color: '#555' }}>Is your Truck Heavier than 1 ton?</p>
-                <select className="form-input" value={formData.truckSize}
+                <h2 className="condensed" style={{ fontSize: '22px', fontWeight: '700', textAlign: 'center', marginBottom: '8px', color: '#1e3a5f' }}>Truck Size</h2>
+                <p style={{ marginBottom: '20px', fontSize: '14px', color: '#444' }}>Is your Truck Heavier than 1 ton?</p>
+                <select className="survey-input" value={formData.truckSize}
                   onChange={(e) => { const val = e.target.value; if (!hasInteracted) { setHasInteracted(true); clarityEvent('weekend_warrior_survey_started'); } clarityEvent('weekend_warrior_answer_truckSize', val); setFormData({...formData, truckSize: val}); setTimeout(() => navigateToStep(getNextStep(3, {...formData, truckSize: val})), 120); }}
                   style={{ color: formData.truckSize ? '#1a1a1a' : '#999' }}>
                   <option value="" disabled>Select an option</option>
@@ -660,8 +690,8 @@ export default function WeekendWarrior() {
 
             {step === 4 && (
               <div>
-                <h2 className="condensed" style={{ fontSize: '22px', fontWeight: '700', textAlign: 'center', marginBottom: '8px', color: '#92400e' }}>Vehicle Age</h2>
-                <p style={{ marginBottom: '20px', fontSize: '14px', color: '#555' }}>When was your Vehicle Manufactured?</p>
+                <h2 className="condensed" style={{ fontSize: '22px', fontWeight: '700', textAlign: 'center', marginBottom: '8px', color: '#1e3a5f' }}>Vehicle Age</h2>
+                <p style={{ marginBottom: '20px', fontSize: '14px', color: '#444' }}>When was your Vehicle Manufactured?</p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   <RadioOption field="vehicleAge" value="2016+" selected={formData.vehicleAge === '2016+'} onChange={handleRadioSelect}>2016 or Newer</RadioOption>
                   <RadioOption field="vehicleAge" value="1997-2015" selected={formData.vehicleAge === '1997-2015'} onChange={handleRadioSelect}>1997 to 2015</RadioOption>
@@ -672,8 +702,8 @@ export default function WeekendWarrior() {
 
             {step === 5 && (
               <div>
-                <h2 className="condensed" style={{ fontSize: '22px', fontWeight: '700', textAlign: 'center', marginBottom: '8px', color: '#92400e' }}>Financing</h2>
-                <p style={{ marginBottom: '20px', fontSize: '14px', color: '#555' }}>Are you Financing your Vehicle?</p>
+                <h2 className="condensed" style={{ fontSize: '22px', fontWeight: '700', textAlign: 'center', marginBottom: '8px', color: '#1e3a5f' }}>Financing</h2>
+                <p style={{ marginBottom: '20px', fontSize: '14px', color: '#444' }}>Are you Financing your Vehicle?</p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   <RadioOption field="financing" value="yes" selected={formData.financing === 'yes'} onChange={handleRadioSelect}>Yes</RadioOption>
                   <RadioOption field="financing" value="no" selected={formData.financing === 'no'} onChange={handleRadioSelect}>No</RadioOption>
@@ -683,15 +713,15 @@ export default function WeekendWarrior() {
 
             {step === 6 && (
               <div>
-                <h2 className="condensed" style={{ fontSize: '22px', fontWeight: '700', textAlign: 'center', marginBottom: '20px', color: '#92400e' }}>Title Status</h2>
+                <h2 className="condensed" style={{ fontSize: '22px', fontWeight: '700', textAlign: 'center', marginBottom: '20px', color: '#1e3a5f' }}>Title Status</h2>
                 {formData.vehicleType === 'import' ? (
-                  <><p style={{ marginBottom: '12px', fontSize: '14px', color: '#555', fontWeight: '500' }}>Does your import have ALL import documentation? *</p>
+                  <><p style={{ marginBottom: '12px', fontSize: '14px', color: '#444', fontWeight: '500' }}>Does your import have ALL import documentation? *</p>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                     <RadioOption field="importDocs" value="yes" selected={formData.importDocs === 'yes'} onChange={handleRadioSelect}>Yes</RadioOption>
                     <RadioOption field="importDocs" value="no" selected={formData.importDocs === 'no'} onChange={handleRadioSelect}>No</RadioOption>
                   </div></>
                 ) : (
-                  <><p style={{ marginBottom: '12px', fontSize: '14px', color: '#555', fontWeight: '500' }}>Do you currently have a Title or Certificate of Origin for your vehicle? *</p>
+                  <><p style={{ marginBottom: '12px', fontSize: '14px', color: '#444', fontWeight: '500' }}>Do you currently have a Title or Certificate of Origin for your vehicle? *</p>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                     <RadioOption field="hasTitle" value="yes" selected={formData.hasTitle === 'yes'} onChange={handleRadioSelect}>Yes</RadioOption>
                     <RadioOption field="hasTitle" value="no" selected={formData.hasTitle === 'no'} onChange={handleRadioSelect}>No</RadioOption>
@@ -702,9 +732,9 @@ export default function WeekendWarrior() {
 
             {step === 7 && (
               <div>
-                <h2 className="condensed" style={{ fontSize: '22px', fontWeight: '700', textAlign: 'center', marginBottom: '8px', color: '#92400e' }}>Salvage Status</h2>
-                <p style={{ marginBottom: '20px', fontSize: '14px', color: '#555' }}>Is it a salvage vehicle? *</p>
-                <select className="form-input" value={formData.isSalvage}
+                <h2 className="condensed" style={{ fontSize: '22px', fontWeight: '700', textAlign: 'center', marginBottom: '8px', color: '#1e3a5f' }}>Salvage Status</h2>
+                <p style={{ marginBottom: '20px', fontSize: '14px', color: '#444' }}>Is it a salvage vehicle? *</p>
+                <select className="survey-input" value={formData.isSalvage}
                   onChange={(e) => { const val = e.target.value; clarityEvent('weekend_warrior_answer_isSalvage', val); setFormData({...formData, isSalvage: val}); setTimeout(() => navigateToStep(getNextStep(7, {...formData, isSalvage: val})), 120); }}
                   style={{ color: formData.isSalvage ? '#1a1a1a' : '#999' }}>
                   <option value="" disabled>Select an option</option>
@@ -716,9 +746,9 @@ export default function WeekendWarrior() {
 
             {step === 8 && (
               <div>
-                <h2 className="condensed" style={{ fontSize: '22px', fontWeight: '700', textAlign: 'center', marginBottom: '8px', color: '#92400e' }}>Salvage Classification</h2>
-                <p style={{ marginBottom: '20px', fontSize: '14px', color: '#555' }}>How is the Salvage Vehicle Classified? *</p>
-                <select className="form-input" value={formData.salvageClassification}
+                <h2 className="condensed" style={{ fontSize: '22px', fontWeight: '700', textAlign: 'center', marginBottom: '8px', color: '#1e3a5f' }}>Salvage Classification</h2>
+                <p style={{ marginBottom: '20px', fontSize: '14px', color: '#444' }}>How is the Salvage Vehicle Classified? *</p>
+                <select className="survey-input" value={formData.salvageClassification}
                   onChange={(e) => { const val = e.target.value; clarityEvent('weekend_warrior_answer_salvageClassification', val); setFormData({...formData, salvageClassification: val}); setTimeout(() => navigateToStep(getNextStep(8, {...formData, salvageClassification: val})), 120); }}
                   style={{ color: formData.salvageClassification ? '#1a1a1a' : '#999' }}>
                   <option value="" disabled>Select an option</option>
@@ -732,8 +762,8 @@ export default function WeekendWarrior() {
             {step === 9 && (
               <div>
                 <h2 className="condensed" style={{ fontSize: '22px', fontWeight: '700', textAlign: 'center', marginBottom: '12px' }}>Salvage Vehicles</h2>
-                <p style={{ marginBottom: '4px', fontSize: '14px', color: '#555', textAlign: 'center' }}>We're sorry but we are unable to help vehicles that are classified salvage.</p>
-                <p style={{ marginBottom: '20px', fontSize: '14px', color: '#555', textAlign: 'center' }}><strong style={{ color: '#d97706' }}>HOWEVER</strong>, we can get you a TEMP TAG!</p>
+                <p style={{ marginBottom: '4px', fontSize: '14px', color: '#444', textAlign: 'center' }}>We're sorry but we are unable to help vehicles that are classified salvage.</p>
+                <p style={{ marginBottom: '20px', fontSize: '14px', color: '#444', textAlign: 'center' }}><strong style={{ color: '#8b1a1a' }}>HOWEVER</strong>, we can get you a TEMP TAG!</p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   <RadioOption field="salvageTempTag" value="view_temp_tags" selected={formData.salvageTempTag === 'view_temp_tags'} onChange={handleRadioSelect}>View Temp Tags</RadioOption>
                 </div>
@@ -743,8 +773,8 @@ export default function WeekendWarrior() {
             {step === 10 && (
               <div>
                 <h2 className="condensed" style={{ fontSize: '22px', fontWeight: '700', textAlign: 'center', marginBottom: '12px' }}>Physical Inspection Needed</h2>
-                <p style={{ marginBottom: '20px', fontSize: '14px', color: '#555' }}>We are only able to help salvage vehicles that receive an in-person salvage vehicle inspection in the state of Montana.</p>
-                <p style={{ marginBottom: '12px', fontSize: '14px', color: '#555' }}>Are you ready to make a trip to Montana?</p>
+                <p style={{ marginBottom: '20px', fontSize: '14px', color: '#444' }}>We are only able to help salvage vehicles that receive an in-person salvage vehicle inspection in the state of Montana.</p>
+                <p style={{ marginBottom: '12px', fontSize: '14px', color: '#444' }}>Are you ready to make a trip to Montana?</p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   <RadioOption field="physicalInspection" value="yes" selected={formData.physicalInspection === 'yes'} onChange={handleRadioSelect}>Yes, I'm willing to come to Montana for a Salvage Vehicle Inspection.</RadioOption>
                   <RadioOption field="physicalInspection" value="no" selected={formData.physicalInspection === 'no'} onChange={handleRadioSelect}>No</RadioOption>
@@ -752,43 +782,103 @@ export default function WeekendWarrior() {
               </div>
             )}
 
+            {/* CRO v4: contact step split into three single-field micro-steps,
+                mirroring the main funnel. Step 11 = name (first + last), step 12
+                = email, step 13 = phone + TCPA + submit. Each step is one
+                cognitive ask. Weekend offer framing is preserved on the headlines
+                and the final step keeps the "last step" callout. */}
+
+            {/* Step 11: Contact Info, Name (single fullName field) */}
             {step === 11 && (
               <div>
-                <h2 className="condensed" style={{ fontSize: '20px', fontWeight: '700', textAlign: 'center', marginBottom: '8px' }}>
-                  Last step to claim your <span style={{ color: '#d97706' }}>free Temp Tag + $300 credit!</span>
+                <p className="mono" style={{ fontSize: '12px', fontWeight: '600', textAlign: 'center', color: '#1e3a5f', letterSpacing: '0.5px', marginBottom: '6px' }}>
+                  SECONDS FROM YOUR FREE TEMP TAG + $300 CREDIT
+                </p>
+                <h2 className="condensed" style={{ fontSize: '20px', fontWeight: '700', textAlign: 'center', marginBottom: '20px', color: '#1a1a1a' }}>
+                  What's your name?
                 </h2>
-                <p style={{ marginBottom: '20px', fontSize: '14px', color: '#555', textAlign: 'center' }}>What is the best way to reach you?</p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   <div>
-                    <label className="mono" style={{ fontSize: '13px', fontWeight: '500', marginBottom: '4px', display: 'block', color: '#444' }}>Full Name *</label>
-                    <input type="text" className="form-input" placeholder="First and Last Name" value={formData.fullName}
-                      onChange={(e) => { const val = e.target.value; setFormData({...formData, fullName: val}); const parts = val.trim().split(/\s+/); if (val.length > 0 && (parts.length < 2 || !parts[1])) setValidationErrors(prev => ({...prev, fullName: 'Please enter your first and last name'})); else setValidationErrors(prev => ({...prev, fullName: undefined})); }}
-                      style={validationErrors.fullName ? { borderColor: '#d97706', boxShadow: '0 0 0 2px rgba(217,119,6,0.15)' } : {}} autoFocus />
-                    {validationErrors.fullName && <span className="mono" style={{ fontSize: '11px', color: '#d97706', marginTop: '2px', display: 'block' }}>{validationErrors.fullName}</span>}
+                    <label className="mono" style={{ fontSize: '13px', fontWeight: '500', marginBottom: '4px', display: 'block', color: '#333' }}>Full name <span style={{ color: '#666', fontWeight: '400' }}>(first and last)</span> *</label>
+                    <input type="text" className="survey-input" placeholder="e.g. John Smith" value={formData.fullName}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setFormData({...formData, fullName: val});
+                        if (!hasEngagedContact && val.length > 0) {
+                          setHasEngagedContact(true);
+                          clarityEvent('weekend_warrior_contact_engagement', 'fullName');
+                        }
+                        const parts = val.trim().split(/\s+/);
+                        if (val.length > 0 && (parts.length < 2 || !parts[1])) setValidationErrors(prev => ({...prev, fullName: 'Please enter both first and last name (e.g. John Smith)'}));
+                        else setValidationErrors(prev => ({...prev, fullName: undefined}));
+                      }}
+                      style={validationErrors.fullName ? { borderColor: '#8b1a1a', boxShadow: '0 0 0 2px rgba(139,26,26,0.15)' } : {}} autoFocus />
+                    {validationErrors.fullName && <span className="mono" style={{ fontSize: '11px', color: '#8b1a1a', marginTop: '2px', display: 'block' }}>{validationErrors.fullName}</span>}
+                    <span className="mono" style={{ fontSize: '11px', color: '#666', marginTop: '4px', display: 'block' }}>Both names required to apply your $300 credit.</span>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* Step 12: Contact Info, Email */}
+            {step === 12 && (
+              <div>
+                <h2 className="condensed" style={{ fontSize: '20px', fontWeight: '700', textAlign: 'center', marginBottom: '20px', color: '#1a1a1a' }}>
+                  What's your best email?
+                </h2>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   <div>
-                    <label className="mono" style={{ fontSize: '13px', fontWeight: '500', marginBottom: '4px', display: 'block', color: '#444' }}>Email *</label>
-                    <input type="email" className="form-input" placeholder="Email" value={formData.email}
-                      onChange={(e) => { const val = e.target.value; setFormData({...formData, email: val}); if (val.length > 0 && !isValidEmail(val)) setValidationErrors(prev => ({...prev, email: 'Please enter a valid email address'})); else setValidationErrors(prev => ({...prev, email: undefined})); }}
-                      style={validationErrors.email ? { borderColor: '#d97706', boxShadow: '0 0 0 2px rgba(217,119,6,0.15)' } : {}} />
-                    {validationErrors.email && <span className="mono" style={{ fontSize: '11px', color: '#d97706', marginTop: '2px', display: 'block' }}>{validationErrors.email}</span>}
+                    <label className="mono" style={{ fontSize: '13px', fontWeight: '500', marginBottom: '4px', display: 'block', color: '#333' }}>Email *</label>
+                    <input type="email" className="survey-input" placeholder="Email" value={formData.email}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setFormData({...formData, email: val});
+                        if (!hasEngagedContact && val.length > 0) {
+                          setHasEngagedContact(true);
+                          clarityEvent('weekend_warrior_contact_engagement', 'email');
+                        }
+                        if (val.length > 0 && !isValidEmail(val)) setValidationErrors(prev => ({...prev, email: 'Please enter a valid email address'}));
+                        else setValidationErrors(prev => ({...prev, email: undefined}));
+                      }}
+                      style={validationErrors.email ? { borderColor: '#8b1a1a', boxShadow: '0 0 0 2px rgba(139,26,26,0.15)' } : {}} autoFocus />
+                    {validationErrors.email && <span className="mono" style={{ fontSize: '11px', color: '#8b1a1a', marginTop: '2px', display: 'block' }}>{validationErrors.email}</span>}
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* Step 13: Contact Info, Phone + TCPA + Submit (the actual last step) */}
+            {step === 13 && (
+              <div>
+                <h2 className="condensed" style={{ fontSize: '20px', fontWeight: '700', textAlign: 'center', marginBottom: '20px', color: '#1a1a1a' }}>
+                  Last step to claim your <span style={{ color: '#8b1a1a' }}>free Temp Tag + $300 credit!</span>
+                </h2>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   <div>
-                    <label className="mono" style={{ fontSize: '13px', fontWeight: '500', marginBottom: '4px', display: 'block', color: '#444' }}>Phone *</label>
-                    <input type="tel" className="form-input" placeholder="Phone" value={formData.phone}
-                      onChange={(e) => { const val = e.target.value; setFormData({...formData, phone: val}); if (val.length > 0 && !isValidPhone(val)) setValidationErrors(prev => ({...prev, phone: 'Please enter a valid 10-digit phone number'})); else setValidationErrors(prev => ({...prev, phone: undefined})); }}
-                      style={validationErrors.phone ? { borderColor: '#d97706', boxShadow: '0 0 0 2px rgba(217,119,6,0.15)' } : {}} />
-                    {validationErrors.phone && <span className="mono" style={{ fontSize: '11px', color: '#d97706', marginTop: '2px', display: 'block' }}>{validationErrors.phone}</span>}
+                    <label className="mono" style={{ fontSize: '13px', fontWeight: '500', marginBottom: '4px', display: 'block', color: '#333' }}>Phone *</label>
+                    <input type="tel" className="survey-input" placeholder="Phone" value={formData.phone}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setFormData({...formData, phone: val});
+                        if (!hasEngagedContact && val.length > 0) {
+                          setHasEngagedContact(true);
+                          clarityEvent('weekend_warrior_contact_engagement', 'phone');
+                        }
+                        if (val.length > 0 && !isValidPhone(val)) setValidationErrors(prev => ({...prev, phone: 'Please enter a valid 10-digit phone number'}));
+                        else setValidationErrors(prev => ({...prev, phone: undefined}));
+                      }}
+                      style={validationErrors.phone ? { borderColor: '#8b1a1a', boxShadow: '0 0 0 2px rgba(139,26,26,0.15)' } : {}} autoFocus />
+                    {validationErrors.phone && <span className="mono" style={{ fontSize: '11px', color: '#8b1a1a', marginTop: '2px', display: 'block' }}>{validationErrors.phone}</span>}
                   </div>
                   <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer', marginTop: '8px' }}>
                     <input type="checkbox" checked={formData.termsAgreed} onChange={(e) => setFormData({...formData, termsAgreed: e.target.checked})}
                       style={{ width: '18px', height: '18px', marginTop: '3px', flexShrink: 0, cursor: 'pointer' }} />
-                    <span className="mono" style={{ fontSize: '11px', color: '#666', lineHeight: '1.5' }}>I agree to receive calls, texts & emails from Legal Tags. Msg & data rates may apply. Reply STOP to opt out.</span>
+                    <span className="mono" style={{ fontSize: '11px', color: '#555', lineHeight: '1.5' }}>I agree to receive calls, texts & emails from Legal Tags. Msg & data rates may apply. Reply STOP to opt out.</span>
                   </label>
                   <div style={{ textAlign: 'center', marginTop: '8px' }}>
-                    <a href="https://legaltags.com/privacy-policy" target="_blank" rel="noopener noreferrer" className="mono" style={{ fontSize: '12px', color: '#d97706' }}>Privacy Policy</a>
+                    <a href="https://legaltags.com/privacy-policy" target="_blank" rel="noopener noreferrer" onClick={() => clarityEvent('weekend_warrior_privacy_policy_click', 'contact_step')} className="mono" style={{ fontSize: '12px', color: '#1e3a5f' }}>Privacy Policy</a>
                     <span className="mono" style={{ fontSize: '12px', color: '#999', margin: '0 8px' }}>|</span>
-                    <a href="https://legaltags.com/terms-and-conditions" target="_blank" rel="noopener noreferrer" className="mono" style={{ fontSize: '12px', color: '#d97706' }}>Terms of Service</a>
+                    <a href="https://legaltags.com/terms-and-conditions" target="_blank" rel="noopener noreferrer" onClick={() => clarityEvent('weekend_warrior_terms_of_service_click', 'contact_step')} className="mono" style={{ fontSize: '12px', color: '#1e3a5f' }}>Terms of Service</a>
                   </div>
                 </div>
               </div>
@@ -797,7 +887,7 @@ export default function WeekendWarrior() {
 
           {/* Navigation Footer */}
           <div style={{
-            background: '#92400e', padding: '14px 20px',
+            background: '#1e3a5f', padding: '14px 20px',
             display: 'flex', justifyContent: 'space-between', alignItems: 'center'
           }}>
             <button type="button" onClick={handlePrev} disabled={stepHistory.length <= 1}
@@ -805,12 +895,13 @@ export default function WeekendWarrior() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <span className="mono" style={{ fontSize: '11px', color: 'rgba(255,255,255,0.7)' }}>🔒 Secure</span>
             </div>
-            {step !== 11 ? (
+            {/* CRO v4: SUBMIT appears on step 13 (the phone step). Steps 0 to 12 use NEXT. */}
+            {step !== 13 ? (
               <button type="button" onClick={handleNext} disabled={!canProceed()}
                 style={{ background: 'transparent', border: 'none', color: canProceed() ? '#fff' : 'rgba(255,255,255,0.3)', fontFamily: "'Oswald', sans-serif", fontSize: '14px', fontWeight: '500', letterSpacing: '1px', cursor: canProceed() ? 'pointer' : 'not-allowed' }}>NEXT →</button>
             ) : (
               <button type="button" onClick={handleSubmit} disabled={!canProceed()}
-                style={{ background: canProceed() ? '#d97706' : 'rgba(217,119,6,0.4)', border: 'none', color: '#fff', fontFamily: "'Oswald', sans-serif", fontSize: '14px', fontWeight: '700', letterSpacing: '1px', padding: '10px 20px', cursor: canProceed() ? 'pointer' : 'not-allowed', borderRadius: '4px' }}>SUBMIT →</button>
+                style={{ background: canProceed() ? '#8b1a1a' : 'rgba(139,26,26,0.4)', border: 'none', color: '#fff', fontFamily: "'Oswald', sans-serif", fontSize: '14px', fontWeight: '600', letterSpacing: '1px', padding: '10px 20px', cursor: canProceed() ? 'pointer' : 'not-allowed', borderRadius: '4px' }}>SUBMIT →</button>
             )}
           </div>
         </div>
